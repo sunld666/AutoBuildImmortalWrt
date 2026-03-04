@@ -1,0 +1,104 @@
+name: build-x86-64-nikki-mini
+
+on:
+  workflow_dispatch:
+    inputs:
+      luci_version:
+        description: "luci版本"
+        required: false
+        default: "24.10.5"
+        type: choice
+        options:
+          - 24.10.0
+          - 24.10.1
+          - 24.10.2
+          - 24.10.3
+          - 24.10.4
+          - 24.10.5
+      custom_router_ip:
+        description: "路由器管理地址"
+        required: true
+        default: "192.168.100.1"
+      profile:
+        description: '固件大小 MB'
+        required: true
+        default: '1024'
+      enable_pppoe:
+        description: "是否配置PPPoE拨号?"
+        required: true
+        default: 'no'
+        type: choice
+        options:
+        - 'yes'
+        - 'no'
+      pppoe_account:
+        description: "宽带账号"
+        required: false
+      pppoe_password:
+        description: "宽带密码"
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 给脚本加执行权限
+        run: chmod +x ${{ github.workspace }}/x86-64/build24-nikki.sh
+
+      - name: 写入自定义路由器IP
+        run: |
+          mkdir -p "${{ github.workspace }}/custom"
+          echo "${{ github.event.inputs.custom_router_ip }}" > "${{ github.workspace }}/custom/custom_router_ip.txt"
+
+      - name: 检查PPPoE参数
+        run: |
+          if [[ "${{ inputs.enable_pppoe }}" == "yes" ]]; then
+            if [[ -z "${{ inputs.pppoe_account }}" || -z "${{ inputs.pppoe_password }}" ]]; then
+              echo "Error: 请填写宽带账号密码"
+              exit 1
+            fi
+          fi
+
+      - name: 编译极简固件(仅Nikki)
+        run: |
+          profile="${{ github.event.inputs.profile }}"
+          luci_version="${{ github.event.inputs.luci_version }}"
+          
+          docker run --rm -i \
+            --user root \
+            -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
+            -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
+            -v "${{ github.workspace }}/custom:/home/build/immortalwrt/files/etc/config" \
+            -v "${{ github.workspace }}/x86-64/imm.config:/home/build/immortalwrt/.config" \
+            -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
+            -v "${{ github.workspace }}/x86-64/build24-nikki.sh:/home/build/immortalwrt/build.sh" \
+            -e PROFILE=$profile \
+            -e INCLUDE_DOCKER=no \
+            -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
+            -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
+            -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+          immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
+
+      - name: 生成信息文件
+        run: |
+          cat > ${{ github.workspace }}/router-info.md <<EOF
+          ## 极简 Nikki 固件
+          - 后台地址: ${{ github.event.inputs.custom_router_ip }}
+          - 用户名: root
+          - 密码: 无
+          - 仅集成: Nikki
+          - 无Docker, 无多余插件
+          EOF
+
+      - name: 上传固件
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: Autobuild-x86-64-NIKKI-MINI
+          body_path: ${{ github.workspace }}/router-info.md
+          files: |
+            ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined-efi.img.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
