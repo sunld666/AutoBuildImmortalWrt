@@ -205,3 +205,4 @@
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-xinetd-zh-cn"
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-xlnetacc-zh-cn"
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-zerotier-zh-cn"
+echo "src/gz nikki https://downloads.nikki-org.org/packages/immortalwrt-24.10/x86_64/nikki" >> feeds.conf.default
